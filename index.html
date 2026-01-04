@@ -1087,13 +1087,42 @@
 
                     if (error) throw error;
 
-                    // Check approval status
-                    const { data: profile } = await supabaseClient
+                    // Fetch Profile with robustness
+                    let { data: profile, error: profileError } = await supabaseClient
                         .from('user_profiles')
                         .select('approved, is_admin')
                         .eq('id', data.user.id)
                         .single();
 
+                    // Self-healing: If profile missing, create it
+                    if (!profile || profileError) {
+                        console.warn('Profile missing, creating default...', profileError);
+                        // Default to not approved, not admin (safe default)
+                        // Exception: If specific email, auto-admin (hardcoded failsafe)
+                        const isAdmin = email === 'zwm64920093@gmail.com';
+                        const isApproved = isAdmin;
+
+                        const { data: newProfile, error: createError } = await supabaseClient
+                            .from('user_profiles')
+                            .insert([{
+                                id: data.user.id,
+                                email: email,
+                                is_admin: isAdmin,
+                                approved: isApproved
+                            }])
+                            .select()
+                            .single();
+
+                        if (!createError) {
+                            profile = newProfile;
+                        } else {
+                            console.error('Failed to auto-create profile:', createError);
+                            // Fallback mock profile so login doesn't crash
+                            profile = { approved: isApproved, is_admin: isAdmin };
+                        }
+                    }
+
+                    // Check approval status
                     if (profile && !profile.approved && !profile.is_admin) {
                         await supabaseClient.auth.signOut();
                         throw new Error('您的账号正在审核中，请等待管理员批准');
@@ -1106,11 +1135,29 @@
                     const { data: { user }, error } = await supabaseClient.auth.getUser();
                     if (error || !user) throw error || new Error('No user');
 
-                    const { data: profile } = await supabaseClient
+                    let { data: profile, error: profileError } = await supabaseClient
                         .from('user_profiles')
                         .select('approved, is_admin')
                         .eq('id', user.id)
                         .single();
+
+                    // Self-healing for session restoration too
+                    if (!profile || profileError) {
+                        const isAdmin = user.email === 'zwm64920093@gmail.com';
+                        const isApproved = isAdmin;
+
+                        const { data: newProfile } = await supabaseClient
+                            .from('user_profiles')
+                            .insert([{
+                                id: user.id,
+                                email: user.email,
+                                is_admin: isAdmin,
+                                approved: isApproved
+                            }])
+                            .select()
+                            .single();
+                        profile = newProfile || { approved: isApproved, is_admin: isAdmin };
+                    }
 
                     return { user: { ...user, ...profile } };
                 }
