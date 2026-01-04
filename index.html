@@ -1034,6 +1034,28 @@
     </div>
 
     <script>
+        // Global Error Handler for debugging
+        window.onerror = function (msg, url, line, col, error) {
+            // Ignore ResizeObserver loop limit exceeded
+            if (msg.includes('ResizeObserver')) return false;
+
+            const errorMsg = `JavaScript Error: ${msg}\nLine: ${line}`;
+            alert(errorMsg);
+
+            // Show error in a dedicated box if possible
+            const errorDiv = document.createElement('div');
+            errorDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:red;color:white;padding:10px;z-index:9999;text-align:center;';
+            errorDiv.innerText = errorMsg;
+            document.body.appendChild(errorDiv);
+        };
+
+        // Check if Supabase loaded
+        if (typeof window.supabase === 'undefined') {
+            const msg = 'Critical Error: Supabase library failed to load.\nPossible network issue accessing CDN.';
+            alert(msg);
+            document.body.innerHTML = `<h1 style="color:red;padding:20px;">${msg}</h1>`;
+            throw new Error(msg);
+        }
         // --- Supabase Configuration ---
         // REPLACE WITH YOUR SUPABASE PROJECT DETAILS
         const SUPABASE_URL = 'https://xszyxoipwpfhiulbmgwk.supabase.co';
