@@ -921,6 +921,8 @@
         </div>
         <button id="loginBtn" class="btn btn-primary" style="margin-left:auto;" onclick="openAuthModal()">👤
             登录云端</button>
+        <button onclick="alert(JSON.stringify(currentUser, null, 2))"
+            style="font-size:10px; opacity:0.5; margin-left:5px;">🛠️ Debug</button>
     </div>
 
     <div class="container">
@@ -1244,20 +1246,23 @@
                 let result;
                 if (isLoginMode) {
                     result = await API.auth.login(email, password);
+
+                    // Login Success Logic
+                    authToken = result.token;
+                    localStorage.setItem('authToken', authToken);
+                    currentUser = result.user;
+
+                    closeAuthModal();
+                    updateUserSession(currentUser);
                 } else {
-                    result = await API.auth.register(email, password);
-                }
+                    // Registration Logic
+                    await API.auth.register(email, password);
 
-                // Save token and user
-                authToken = result.token;
-                localStorage.setItem('authToken', authToken);
-                currentUser = result.user;
+                    // Do NOT auto-login. Show message and switch to login mode.
+                    alert('✅ 注册成功！\n请等待管理员批准您的账号后，再进行登录。\n\nRegistration successful! Please wait for administrator approval before logging in.');
 
-                closeAuthModal();
-                updateUserSession(currentUser);
-
-                if (!isLoginMode) {
-                    alert('✅ 注册成功！');
+                    // Switch to login mode for convenience
+                    toggleAuthMode();
                 }
 
             } catch (err) {
