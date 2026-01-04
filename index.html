@@ -1061,7 +1061,7 @@
         const SUPABASE_URL = 'https://xszyxoipwpfhiulbmgwk.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhzenl4b2lwd3BmaGl1bGJtZ3drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0MTYzMTgsImV4cCI6MjA4Mjk5MjMxOH0.2bYcME5HiVYQsIdS2SbrXGK5KhyJLGs_5_hGuBeBzXs';
 
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let currentUser = null;
 
@@ -1069,7 +1069,7 @@
         const API = {
             auth: {
                 async register(email, password) {
-                    const { data, error } = await supabase.auth.signUp({
+                    const { data, error } = await supabaseClient.auth.signUp({
                         email,
                         password
                     });
@@ -1078,7 +1078,7 @@
                 },
 
                 async login(email, password) {
-                    const { data, error } = await supabase.auth.signInWithPassword({
+                    const { data, error } = await supabaseClient.auth.signInWithPassword({
                         email,
                         password
                     });
@@ -1086,14 +1086,14 @@
                     if (error) throw error;
 
                     // Check approval status
-                    const { data: profile } = await supabase
+                    const { data: profile } = await supabaseClient
                         .from('user_profiles')
                         .select('approved, is_admin')
                         .eq('id', data.user.id)
                         .single();
 
                     if (profile && !profile.approved && !profile.is_admin) {
-                        await supabase.auth.signOut();
+                        await supabaseClient.auth.signOut();
                         throw new Error('您的账号正在审核中，请等待管理员批准');
                     }
 
@@ -1101,10 +1101,10 @@
                 },
 
                 async getMe() {
-                    const { data: { user }, error } = await supabase.auth.getUser();
+                    const { data: { user }, error } = await supabaseClient.auth.getUser();
                     if (error || !user) throw error || new Error('No user');
 
-                    const { data: profile } = await supabase
+                    const { data: profile } = await supabaseClient
                         .from('user_profiles')
                         .select('approved, is_admin')
                         .eq('id', user.id)
@@ -1116,7 +1116,7 @@
 
             progress: {
                 async get() {
-                    const { data, error } = await supabase
+                    const { data, error } = await supabaseClient
                         .from('user_progress')
                         .select('*')
                         .single();
@@ -1125,7 +1125,7 @@
                 },
 
                 async update(data) {
-                    const { error } = await supabase
+                    const { error } = await supabaseClient
                         .from('user_progress')
                         .upsert({
                             user_id: currentUser.id,
@@ -1138,7 +1138,7 @@
 
             stats: {
                 async getAll() {
-                    const { data, error } = await supabase
+                    const { data, error } = await supabaseClient
                         .from('user_stats')
                         .select('*');
                     if (error) throw error;
@@ -1146,7 +1146,7 @@
                 },
 
                 async update(word, correct, wrong, last_practiced) {
-                    const { error } = await supabase
+                    const { error } = await supabaseClient
                         .from('user_stats')
                         .upsert({
                             user_id: currentUser.id,
@@ -1161,7 +1161,7 @@
 
             admin: {
                 async getPendingUsers() {
-                    const { data, error } = await supabase
+                    const { data, error } = await supabaseClient
                         .from('user_profiles')
                         .select('id, email, created_at')
                         .eq('approved', false);
@@ -1170,7 +1170,7 @@
                 },
 
                 async approveUser(userId) {
-                    const { error } = await supabase
+                    const { error } = await supabaseClient
                         .from('user_profiles')
                         .update({ approved: true })
                         .eq('id', userId);
@@ -1180,7 +1180,7 @@
                 async rejectUser(userId) {
                     // Note: Client-side cannot delete from auth.users easily without service role.
                     // We will just delete the profile which effectively bans them.
-                    const { error } = await supabase
+                    const { error } = await supabaseClient
                         .from('user_profiles')
                         .delete()
                         .eq('id', userId);
