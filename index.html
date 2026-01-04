@@ -1,0 +1,2187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>英语单词拼写检测</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg-color: #f5f7fa;
+            --text-color: #333;
+            --text-secondary: #666;
+            --card-bg: white;
+            --border-color: #eee;
+            --input-bg: #fafafa;
+            --input-border: #ddd;
+            --primary-color: #007BFF;
+            --sidebar-bg: white;
+            --sidebar-hover: #f0f7ff;
+            --sidebar-active: #e6f2ff;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #1a1a1a;
+            --text-color: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --card-bg: #2d2d2d;
+            --border-color: #404040;
+            --input-bg: #333;
+            --input-border: #555;
+            --primary-color: #4da3ff;
+            --sidebar-bg: #2d2d2d;
+            --sidebar-hover: #3d3d3d;
+            --sidebar-active: #404040;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 10px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .header {
+            text-align: center;
+            font-size: clamp(20px, 5vw, 28px);
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+        }
+
+        .control-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transition: background 0.3s;
+        }
+
+        .control-bar>* {
+            flex-shrink: 0;
+        }
+
+        .time-display {
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-align: center;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            font-size: 14px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-height: 44px;
+            min-width: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .mode-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .mode-btn {
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .mode-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+            box-shadow: 0 2px 5px rgba(0, 123, 255, 0.3);
+        }
+
+        .word-stats {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .stat-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #f0f0f0;
+        }
+
+        .stat-badge.wrong {
+            color: #dc3545;
+            background: #ffe6e6;
+        }
+
+        .stat-badge.correct {
+            color: #28a745;
+            background: #e6ffea;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-status {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-top: 5px;
+        }
+
+        .container {
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            transition: background 0.3s;
+        }
+
+        .word-item {
+            padding: 20px 15px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .word-item:last-child {
+            border-bottom: none;
+        }
+
+        .chinese-text {
+            font-size: 18px;
+            font-weight: 500;
+            color: var(--text-color);
+            text-align: left;
+        }
+
+        .input-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-box {
+            flex: 1;
+            padding: 12px;
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--primary-color);
+            border: 2px solid var(--input-border);
+            border-radius: 8px;
+            background-color: var(--input-bg);
+            outline: none;
+            transition: border-color 0.3s, background-color 0.3s;
+        }
+
+        .input-box:focus {
+            border-color: var(--primary-color);
+            background-color: var(--card-bg);
+        }
+
+        .check-icon {
+            font-size: 24px;
+            min-width: 30px;
+            text-align: center;
+            display: none;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .btn-icon {
+            min-width: 44px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-sound {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .btn-sound:hover {
+            background-color: #1e7e34;
+        }
+
+        .btn-spell {
+            background-color: #ffc107;
+            color: #212529;
+        }
+
+        .btn-spell:hover {
+            background-color: #e0a800;
+        }
+
+        .pagination {
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .pagination button {
+            min-width: 44px;
+            min-height: 44px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: var(--input-bg);
+            color: var(--text-secondary);
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .pagination button.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .pagination button:hover:not(.active) {
+            background-color: var(--border-color);
+        }
+
+        .fullscreen-spell {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.95);
+            color: white;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            flex-wrap: wrap;
+            padding: 20px;
+        }
+
+        .spell-letter {
+            color: #ff6b6b;
+            font-weight: bold;
+            font-size: clamp(40px, 12vw, 100px);
+            margin: 0 clamp(5px, 2vw, 20px);
+            opacity: 0;
+            position: relative;
+            animation: letterAppear 0.5s forwards;
+        }
+
+        @keyframes letterAppear {
+            from {
+                opacity: 0;
+                transform: translateY(-30px) scale(0.8);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .close-spell {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            font-size: 24px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        /* 移动端优化 */
+        @media (max-width: 768px) {
+            body {
+                padding: 5px;
+            }
+
+            .control-bar {
+                padding: 10px;
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .control-bar>* {
+                width: 100%;
+                margin-bottom: 8px;
+            }
+
+            .control-bar>*:last-child {
+                margin-bottom: 0;
+            }
+
+            .word-item {
+                padding: 15px 10px;
+            }
+
+            .chinese-text {
+                font-size: 16px;
+            }
+
+            .input-box {
+                font-size: 16px;
+                padding: 10px;
+            }
+
+            .pagination {
+                padding: 15px 10px;
+                gap: 5px;
+            }
+
+            .pagination button {
+                min-width: 40px;
+                min-height: 40px;
+                font-size: 14px;
+            }
+        }
+
+        /* 超小屏幕优化 */
+        @media (max-width: 480px) {
+            .action-buttons {
+                justify-content: center;
+            }
+
+            .btn-icon {
+                width: 40px;
+                height: 40px;
+                font-size: 16px;
+            }
+
+            .spell-letter {
+                margin: 0 clamp(2px, 1vw, 10px);
+            }
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .modal-card {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 90%;
+            width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            animation: slideUp 0.3s ease-out;
+            color: var(--text-color);
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: var(--text-color);
+        }
+
+        .modal-text {
+            color: var(--text-secondary);
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        /* Library Sidebar */
+        .library-drawer {
+            position: fixed;
+            left: -260px;
+            top: 0;
+            width: 260px;
+            height: 100%;
+            background: var(--sidebar-bg);
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            z-index: 1500;
+            transition: left 0.3s ease;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            color: var(--text-color);
+        }
+
+        .library-drawer.open {
+            left: 0;
+        }
+
+        .library-header {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-color);
+        }
+
+        .library-list {
+            list-style: none;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .library-item {
+            padding: 10px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 14px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .library-item:hover {
+            background-color: var(--sidebar-hover);
+            color: var(--primary-color);
+        }
+
+        .library-item.active {
+            background-color: var(--sidebar-active);
+            color: var(--primary-color);
+            font-weight: bold;
+            border-left: 3px solid var(--primary-color);
+        }
+
+        .library-toggle {
+            position: fixed;
+            left: 20px;
+            top: 20px;
+            z-index: 1400;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            color: var(--text-color);
+        }
+
+        /* Theme Toggle Button */
+        .theme-toggle {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            z-index: 1400;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            font-size: 20px;
+        }
+
+        /* ========== Mobile Responsive Styles ========== */
+        @media (max-width: 768px) {
+
+            /* Header adjustments */
+            h1 {
+                font-size: 20px;
+                padding: 12px;
+            }
+
+            /* Control bar - stack vertically */
+            .control-bar {
+                flex-direction: column;
+                gap: 10px;
+                padding: 10px;
+            }
+
+            .mode-bar {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 5px;
+            }
+
+            .mode-btn {
+                font-size: 11px;
+                padding: 6px 10px;
+            }
+
+            /* File input and buttons */
+            .file-input-wrapper {
+                width: 100%;
+            }
+
+            .file-status {
+                font-size: 12px;
+            }
+
+            /* User profile section */
+            .user-profile {
+                flex-direction: column;
+                align-items: stretch !important;
+                gap: 5px;
+                width: 100%;
+            }
+
+            .user-profile span {
+                font-size: 12px;
+                text-align: center;
+            }
+
+            .user-profile button {
+                width: 100%;
+            }
+
+            #loginBtn {
+                width: 100% !important;
+                margin: 5px 0 !important;
+            }
+
+            /* Container and cards */
+            .container {
+                padding: 10px;
+            }
+
+            .word-card {
+                padding: 15px;
+                margin: 10px 0;
+            }
+
+            .word-main {
+                font-size: 22px;
+            }
+
+            .phonetic {
+                font-size: 14px;
+            }
+
+            .chinese {
+                font-size: 16px;
+            }
+
+            /* Spelling container */
+            .fullscreen-spell {
+                padding: 20px;
+            }
+
+            #spellWord {
+                font-size: 32px;
+            }
+
+            #spellPrompt {
+                font-size: 14px;
+            }
+
+            #spellInput {
+                font-size: 18px;
+                padding: 12px;
+            }
+
+            .spell-hint {
+                font-size: 12px;
+            }
+
+            /* Modal adjustments */
+            .modal-card {
+                width: 95% !important;
+                max-width: 95% !important;
+                margin: 10px;
+                padding: 15px;
+            }
+
+            .modal-title {
+                font-size: 18px;
+            }
+
+            .modal-text {
+                font-size: 14px;
+            }
+
+            /* Buttons */
+            .btn {
+                font-size: 13px;
+                padding: 8px 15px;
+            }
+
+            .btn-logout {
+                font-size: 12px;
+                padding: 6px 12px;
+            }
+
+            /* Pagination */
+            .pagination button {
+                padding: 6px 10px;
+                font-size: 13px;
+            }
+
+            /* Timer and screenshot buttons */
+            #timerBtn,
+            #screenshotBtn {
+                font-size: 12px;
+                padding: 6px 10px;
+            }
+
+            #elapsedTimeDisplay {
+                font-size: 12px;
+            }
+
+            /* Help modal content */
+            #helpModal .modal-card {
+                font-size: 14px;
+                line-height: 1.6;
+            }
+
+            #helpModal h3 {
+                font-size: 16px;
+            }
+
+            #helpModal li {
+                font-size: 13px;
+            }
+
+            /* Admin panel */
+            #adminPanelBtn {
+                margin-left: 0 !important;
+            }
+        }
+
+        /* Extra small devices (phones in portrait) */
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 18px;
+            }
+
+            .mode-btn {
+                font-size: 10px;
+                padding: 5px 8px;
+            }
+
+            .word-main {
+                font-size: 20px;
+            }
+
+            #spellWord {
+                font-size: 28px;
+            }
+
+            .btn {
+                font-size: 12px;
+                padding: 7px 12px;
+            }
+
+            .modal-card {
+                padding: 12px;
+            }
+        }
+
+        /* Landscape mode adjustments */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .fullscreen-spell {
+                padding: 10px;
+            }
+
+            #spellWord {
+                font-size: 24px;
+            }
+
+            #spellInput {
+                padding: 8px;
+            }
+        }
+    </style>
+    <style>
+        /* ... existing styles ... */
+
+        /* Auth Modal Specifics */
+        .auth-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            text-align: left;
+        }
+
+        .auth-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--input-border);
+            background: var(--input-bg);
+            color: var(--text-color);
+            border-radius: 8px;
+            outline: none;
+        }
+
+        .auth-input:focus {
+            border-color: var(--primary-color);
+        }
+
+        .auth-error {
+            color: #dc3545;
+            font-size: 13px;
+            display: none;
+            /* hidden by default */
+            margin-top: -10px;
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .btn-logout {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 12px;
+            padding: 5px 10px;
+            min-height: 30px;
+            min-width: auto;
+        }
+
+        .btn-logout:hover {
+            color: #dc3545;
+            border-color: #dc3545;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Theme Toggle Button -->
+    <button class="theme-toggle" onclick="toggleTheme()" title="切换日间/夜间模式">🌓</button>
+
+    <!-- Library Toggle Button -->
+    <button class="library-toggle" id="libraryToggleBtn" onclick="toggleLibrary()" title="登录后查看词库列表"
+        disabled>📚</button>
+
+    <!-- Library Drawer -->
+    <div class="library-drawer" id="libraryDrawer">
+        <div class="library-header">
+            <span>我的词库</span>
+            <span style="font-size:14px; cursor:pointer;" onclick="toggleLibrary()">✕</span>
+        </div>
+        <div style="margin-bottom:15px;">
+            <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none"
+                onchange="handleFolderSelect(this)">
+            <button class="btn btn-primary" onclick="document.getElementById('folderInput').click()"
+                style="width:100%; font-size:12px;">📂 导入词库文件夹</button>
+        </div>
+        <ul class="library-list" id="libraryList">
+            <li class="library-item" style="color:#999; text-align:center;">暂无词库<br>请点击上方按钮导入</li>
+        </ul>
+    </div>
+
+    <div class="header">
+        英语单词拼写检测
+        <div style="font-size: 10px; color: #999; font-weight: normal; margin-top: 5px;">
+            v1.1.0 (Live Update)
+            <span style="cursor:pointer; text-decoration:underline; margin-left:10px;" onclick="hardReset()">🔄
+                强制刷新数据</span>
+        </div>
+    </div>
+
+    <div class="control-bar">
+        <div class="mode-bar">
+            <button class="mode-btn active" onclick="switchMode('all')">📚 全部练习</button>
+            <button class="mode-btn" onclick="switchMode('new')">🆕 未背诵</button>
+            <button class="mode-btn" onclick="switchMode('mistake')">❌ 易错题</button>
+            <button class="mode-btn" onclick="switchMode('mastered')">✅ 已背熟</button>
+            <button class="btn btn-secondary" onclick="resetAllMastered()"
+                style="margin-left: 10px; font-size: 12px; padding: 5px 12px;">🔄 重置已背熟</button>
+            <button class="btn btn-secondary" onclick="openHelpModal()"
+                style="margin-left: 5px; font-size: 12px; padding: 5px 12px;">❓ 使用说明</button>
+        </div>
+
+        <div class="time-display" id="currentTime"></div>
+
+        <div class="file-input-wrapper" id="fileInputWrapper">
+            <input type="file" id="fileInput" accept=".txt,.csv" disabled>
+            <button class="btn btn-primary" id="fileSelectBtn" disabled>📁 选择文件</button>
+        </div>
+
+        <div class="file-status" id="fileStatus">⚠️ 请先登录后才能导入词库</div>
+
+        <button id="timerBtn" class="btn btn-secondary">⏱️ 开始计时</button>
+        <span id="elapsedTimeDisplay">已用时间: 0 秒</span>
+        <button id="screenshotBtn" class="btn btn-secondary">📷 截图保存</button>
+        <!-- User Profile Section -->
+        <div id="userSection" class="user-profile" style="display:none; margin-left:auto;">
+            <span id="userEmail"></span>
+            <button id="adminPanelBtn" class="btn btn-secondary" onclick="openAdminPanel()"
+                style="display:none; font-size:12px; padding:5px 10px; position:relative;">
+                👑 管理
+                <span id="adminBadge"
+                    style="display:none; position:absolute; top:-5px; right:-5px; background:#dc3545; color:white; border-radius:10px; padding:2px 6px; font-size:10px; font-weight:bold;"></span>
+            </button>
+            <button class="btn-logout" onclick="signOut()">退出</button>
+        </div>
+        <button id="loginBtn" class="btn btn-primary" style="margin-left:auto;" onclick="openAuthModal()">👤
+            登录云端</button>
+    </div>
+
+    <div class="container">
+        <div id="wordList"></div>
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <div class="fullscreen-spell" id="spellContainer">
+        <button class="close-spell" onclick="closeSpelling()">×</button>
+    </div>
+
+    <!-- Auth Modal -->
+    <div class="modal-overlay" id="authModal">
+        <div class="modal-card">
+            <div class="modal-title" id="authTitle">登录 / 注册</div>
+            <div class="auth-container">
+                <input type="email" id="authEmail" class="auth-input" placeholder="邮箱地址 (Email)">
+                <input type="password" id="authPassword" class="auth-input" placeholder="密码 (Password - min 6 chars)">
+                <div class="auth-error" id="authError"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick="closeAuthModal()">取消</button>
+                    <button class="btn btn-primary" onclick="handleAuthAction()" id="authActionBtn">登录 / 注册</button>
+                </div>
+            </div>
+            <div style="margin-top:15px; font-size:12px; color:var(--text-secondary); cursor:pointer;"
+                onclick="toggleAuthMode()">
+                <span id="authSwitchText">没有账号？点击注册</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resume Modal -->
+    <div class="modal-overlay" id="resumeModal">
+        <div class="modal-card">
+            <div class="modal-title">发现上次练习进度</div>
+            <div class="modal-text" id="resumeText">
+                你上次练习到了 第 <span id="savedParams" style="font-weight:bold; color:#007BFF">1</span> 页，是否继续？
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="handleResume(false)">🔄 重新开始</button>
+                <button class="btn btn-primary" onclick="handleResume(true)">🔙 继续练习</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Panel Modal -->
+    <div class="modal-overlay" id="adminModal">
+        <div class="modal-card" style="width: 600px; max-width: 90%;">
+            <div class="modal-title">👑 管理员面板 - 用户审核</div>
+            <div id="pendingUsersList" style="max-height: 400px; overflow-y: auto; margin: 20px 0;">
+                <p style="text-align:center; color:#666;">加载中...</p>
+            </div>
+            <div style="text-align:center;">
+                <button class="btn btn-secondary" onclick="closeAdminPanel()">关闭</button>
+                <button class="btn btn-primary" onclick="loadPendingUsers()">🔄 刷新</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help/Usage Instructions Modal -->
+    <div class="modal-overlay" id="helpModal">
+        <div class="modal-card" style="width: 700px; max-width: 90%; max-height: 80vh; overflow-y: auto;">
+            <div class="modal-title">📖 使用说明</div>
+            <div style="padding: 20px; text-align: left; line-height: 1.8;">
+                <h3 style="margin-top: 0;">🎯 功能介绍</h3>
+                <ul>
+                    <li><strong>📚 全部练习</strong>：练习词库中的所有单词</li>
+                    <li><strong>🆕 未背诵</strong>：只练习从未答对过的新单词</li>
+                    <li><strong>❌ 易错题</strong>：只练习答错次数 > 答对次数的单词</li>
+                </ul>
+
+                <h3>🔐 账号功能</h3>
+                <ul>
+                    <li><strong>👤 登录云端</strong>：注册/登录后，所有学习进度自动同步到服务器</li>
+                    <li><strong>导入词库</strong>：登录后才能导入自定义CSV词库文件</li>
+                    <li><strong>跨设备同步</strong>：换电脑也能继续之前的学习进度</li>
+                </ul>
+                <div
+                    style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin: 15px 0; border-radius: 4px;">
+                    <strong>⚠️ 重要提示：</strong><br>
+                    必须先<strong>登录账号</strong>才能：<br>
+                    • 保存学习记录（正确/错误次数）<br>
+                    • 导入自定义单词表<br>
+                    • 跨设备同步进度
+                </div>
+
+                <h3>⏱️ 其他功能</h3>
+                <ul>
+                    <li><strong>开始计时</strong>：记录您的练习时长</li>
+                    <li><strong>截图保存</strong>：保存当前学习进度截图，方便打卡分享</li>
+                    <li><strong>深色模式</strong>：点击右上角 🌙 切换主题</li>
+                </ul>
+
+                <h3>📁 CSV 文件格式</h3>
+                <p>词库文件需要包含以下列（用逗号分隔）：</p>
+                <code style="display: block; background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                    单词,音标,中文,例句,句子翻译
+                </code>
+                <p style="font-size: 12px; color: #666;">示例：apple,/ˈæpl/,苹果,I like apples,我喜欢苹果</p>
+
+                <h3>👑 管理员功能</h3>
+                <ul>
+                    <li>管理员登录后可以看到 <strong>"👑 管理"</strong> 按钮</li>
+                    <li>点击可以审核新用户的注册申请</li>
+                </ul>
+            </div>
+            <div style="text-align:center; padding: 10px;">
+                <button class="btn btn-primary" onclick="closeHelpModal()">知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Supabase Configuration ---
+        // REPLACE WITH YOUR SUPABASE PROJECT DETAILS
+        const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+        const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
+
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let currentUser = null;
+
+        // API Client Adapter for Supabase
+        const API = {
+            auth: {
+                async register(email, password) {
+                    const { data, error } = await supabase.auth.signUp({
+                        email,
+                        password
+                    });
+                    if (error) throw error;
+                    return { user: data.user, token: data.session?.access_token };
+                },
+
+                async login(email, password) {
+                    const { data, error } = await supabase.auth.signInWithPassword({
+                        email,
+                        password
+                    });
+
+                    if (error) throw error;
+
+                    // Check approval status
+                    const { data: profile } = await supabase
+                        .from('user_profiles')
+                        .select('approved, is_admin')
+                        .eq('id', data.user.id)
+                        .single();
+
+                    if (profile && !profile.approved && !profile.is_admin) {
+                        await supabase.auth.signOut();
+                        throw new Error('您的账号正在审核中，请等待管理员批准');
+                    }
+
+                    return { user: { ...data.user, ...profile }, token: data.session?.access_token };
+                },
+
+                async getMe() {
+                    const { data: { user }, error } = await supabase.auth.getUser();
+                    if (error || !user) throw error || new Error('No user');
+
+                    const { data: profile } = await supabase
+                        .from('user_profiles')
+                        .select('approved, is_admin')
+                        .eq('id', user.id)
+                        .single();
+
+                    return { user: { ...user, ...profile } };
+                }
+            },
+
+            progress: {
+                async get() {
+                    const { data, error } = await supabase
+                        .from('user_progress')
+                        .select('*')
+                        .single();
+                    if (error && error.code !== 'PGRST116') console.error(error); // PGRST116 is "no rows"
+                    return { progress: data || {} };
+                },
+
+                async update(data) {
+                    const { error } = await supabase
+                        .from('user_progress')
+                        .upsert({
+                            user_id: currentUser.id,
+                            ...data,
+                            updated_at: new Date()
+                        });
+                    if (error) throw error;
+                }
+            },
+
+            stats: {
+                async getAll() {
+                    const { data, error } = await supabase
+                        .from('user_stats')
+                        .select('*');
+                    if (error) throw error;
+                    return { stats: data };
+                },
+
+                async update(word, correct, wrong, last_practiced) {
+                    const { error } = await supabase
+                        .from('user_stats')
+                        .upsert({
+                            user_id: currentUser.id,
+                            word,
+                            correct,
+                            wrong,
+                            last_practiced
+                        }, { onConflict: 'user_id,word' });
+                    if (error) throw error;
+                }
+            },
+
+            admin: {
+                async getPendingUsers() {
+                    const { data, error } = await supabase
+                        .from('user_profiles')
+                        .select('id, email, created_at')
+                        .eq('approved', false);
+                    if (error) throw error;
+                    return { users: data };
+                },
+
+                async approveUser(userId) {
+                    const { error } = await supabase
+                        .from('user_profiles')
+                        .update({ approved: true })
+                        .eq('id', userId);
+                    if (error) throw error;
+                },
+
+                async rejectUser(userId) {
+                    // Note: Client-side cannot delete from auth.users easily without service role.
+                    // We will just delete the profile which effectively bans them.
+                    const { error } = await supabase
+                        .from('user_profiles')
+                        .delete()
+                        .eq('id', userId);
+                    if (error) throw error;
+                }
+            }
+        };
+
+        let allWordData = []; // Store complete dataset
+        let displayData = []; // Store filtered data for display
+        let currentPage = 1;
+        let startTime;
+        let spellTimeout;
+        let currentMode = 'all'; // 'all', 'new', 'mistake'
+        const WORDS_PER_PAGE = 10;
+        const youdaoAPI = 'https://dict.youdao.com/dictvoice?audio=';
+
+        // --- Auth Functions ---
+        let isLoginMode = true;
+
+        function openAuthModal() {
+            document.getElementById('authModal').style.display = 'flex';
+            resetAuthUI();
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').style.display = 'none';
+        }
+
+        function toggleAuthMode() {
+            isLoginMode = !isLoginMode;
+            resetAuthUI();
+        }
+
+        function resetAuthUI() {
+            document.getElementById('authTitle').innerText = isLoginMode ? '登录云端' : '注册新账号';
+            document.getElementById('authActionBtn').innerText = isLoginMode ? '立即登录' : '立即注册';
+            document.getElementById('authSwitchText').innerText = isLoginMode ? '没有账号？点击注册' : '已有账号？点击登录';
+            document.getElementById('authError').style.display = 'none';
+        }
+
+        async function handleAuthAction() {
+            const email = document.getElementById('authEmail').value;
+            const password = document.getElementById('authPassword').value;
+            const errorEl = document.getElementById('authError');
+            const btn = document.getElementById('authActionBtn');
+
+            errorEl.style.display = 'none';
+
+            if (!email || !password || password.length < 6) {
+                errorEl.innerText = '请输入有效的邮箱和密码（密码至少6位）';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            const originalText = btn.innerText;
+            btn.innerText = '处理中...';
+            btn.disabled = true;
+
+            try {
+                let result;
+                if (isLoginMode) {
+                    result = await API.auth.login(email, password);
+                } else {
+                    result = await API.auth.register(email, password);
+                }
+
+                // Save token and user
+                authToken = result.token;
+                localStorage.setItem('authToken', authToken);
+                currentUser = result.user;
+
+                closeAuthModal();
+                updateUserSession(currentUser);
+
+                if (!isLoginMode) {
+                    alert('✅ 注册成功！');
+                }
+
+            } catch (err) {
+                errorEl.innerText = err.message;
+                errorEl.style.display = 'block';
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function signOut() {
+            authToken = null;
+            currentUser = null;
+            localStorage.removeItem('authToken');
+            window.location.reload();
+        }
+
+        // Auth Init
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Theme Init
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+
+            // Check for saved token
+            authToken = localStorage.getItem('authToken');
+
+            if (authToken) {
+                try {
+                    const result = await API.auth.getMe();
+                    currentUser = result.user;
+                    updateUserSession(currentUser);
+                } catch (error) {
+                    console.warn('Token invalid or expired:', error);
+                    localStorage.removeItem('authToken');
+                    authToken = null;
+                    updateUserSession(null);
+                }
+            } else {
+                updateUserSession(null);
+            }
+        });
+
+        function updateUserSession(user) {
+            currentUser = user;
+            const userSection = document.getElementById('userSection');
+            const loginBtn = document.getElementById('loginBtn');
+            const adminPanelBtn = document.getElementById('adminPanelBtn');
+            const fileInput = document.getElementById('fileInput');
+            const fileSelectBtn = document.getElementById('fileSelectBtn');
+            const fileStatus = document.getElementById('fileStatus');
+            const libraryToggleBtn = document.getElementById('libraryToggleBtn');
+
+            if (currentUser) {
+                document.getElementById('userEmail').innerText = currentUser.email;
+                userSection.style.display = 'flex';
+                loginBtn.style.display = 'none';
+
+                // Show admin button if user is admin
+                if (currentUser.is_admin) {
+                    adminPanelBtn.style.display = 'inline-block';
+                    // Load pending users count for badge
+                    loadPendingCount();
+                }
+
+                // Enable file selection for logged-in users
+                if (fileInput) fileInput.disabled = false;
+                if (fileSelectBtn) fileSelectBtn.disabled = false;
+                if (fileStatus) fileStatus.innerText = '👆 请选择CSV词库文件,或使用示例数据';
+
+                // Enable library toggle
+                if (libraryToggleBtn) {
+                    libraryToggleBtn.disabled = false;
+                    libraryToggleBtn.title = '打开词库列表';
+                }
+
+                // Load cloud data
+                CloudPersistence.load();
+            } else {
+                userSection.style.display = 'none';
+                loginBtn.style.display = 'block';
+                if (adminPanelBtn) adminPanelBtn.style.display = 'none';
+
+                // Disable file selection for non-logged-in users
+                if (fileInput) fileInput.disabled = true;
+                if (fileSelectBtn) fileSelectBtn.disabled = true;
+                if (fileStatus) fileStatus.innerText = '⚠️ 请先登录后才能导入词库';
+
+                // Disable library toggle
+                if (libraryToggleBtn) {
+                    libraryToggleBtn.disabled = true;
+                    libraryToggleBtn.title = '登录后查看词库列表';
+                }
+                autoLoadCSV(); // Fallback to local
+            }
+        }
+
+        // --- Admin Panel Functions ---
+        async function loadPendingCount() {
+            try {
+                const { users } = await API.admin.getPendingUsers();
+                const count = (users || []).length;
+                const badge = document.getElementById('adminBadge');
+
+                if (count > 0 && badge) {
+                    badge.innerText = count;
+                    badge.style.display = 'block';
+                } else if (badge) {
+                    badge.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Failed to load pending count:', error);
+            }
+        }
+
+        function openAdminPanel() {
+            document.getElementById('adminModal').style.display = 'flex';
+            loadPendingUsers();
+        }
+
+        function closeAdminPanel() {
+            document.getElementById('adminModal').style.display = 'none';
+        }
+
+        async function loadPendingUsers() {
+            const container = document.getElementById('pendingUsersList');
+            container.innerHTML = '<p style="text-align:center; color:#666;">加载中...</p>';
+
+            try {
+                const { users } = await API.admin.getPendingUsers();
+
+                if (users.length === 0) {
+                    container.innerHTML = '<p style="text-align:center; color:#666;">🎉 没有待审核用户</p>';
+                    return;
+                }
+
+                container.innerHTML = users.map(user => `
+                    <div style="border: 1px solid var(--border-color); padding: 15px; margin: 10px 0; border-radius: 8px; background: var(--card-bg);">
+                        <div style="margin-bottom: 10px;">
+                            <strong>📧 邮箱:</strong> ${user.email}<br>
+                            <span style="font-size: 12px; color: #666;">注册时间: ${new Date(user.created_at).toLocaleString('zh-CN')}</span>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-primary" onclick="approveUser('${user.id}')" style="background-color: #28a745;">✅ 批准</button>
+                            <button class="btn btn-secondary" onclick="rejectUser('${user.id}')" style="background-color: #dc3545; color: white;">❌ 拒绝</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                container.innerHTML = '<p style="text-align:center; color:#dc3545;">❌ 加载失败: ' + error.message + '</p>';
+            }
+        }
+
+        async function approveUser(userId) {
+            if (!confirm('确定批准该用户？')) return;
+
+            try {
+                await API.admin.approveUser(userId);
+                alert('✅ 已批准！');
+                loadPendingUsers(); // Refresh list
+                loadPendingCount(); // Update badge
+            } catch (error) {
+                alert('❌ 操作失败: ' + error.message);
+            }
+        }
+
+        async function rejectUser(userId) {
+            if (!confirm('确定拒绝该用户？该操作将删除用户账号。')) return;
+
+            try {
+                await API.admin.rejectUser(userId);
+                alert('✅ 已拒绝并删除！');
+                loadPendingUsers(); // Refresh list
+                loadPendingCount(); // Update badge
+            } catch (error) {
+                alert('❌ 操作失败: ' + error.message);
+            }
+        }
+
+        // --- Help Modal Functions ---
+        function openHelpModal() {
+            document.getElementById('helpModal').style.display = 'flex';
+        }
+
+        function closeHelpModal() {
+            document.getElementById('helpModal').style.display = 'none';
+        }
+
+
+        // Base64 Simple Ding Sound
+        const correctSoundBase64 = "data:audio/wav;base64,UklGRl9vTNEAAXdvYmtuPgPNEDYAAA..."; // Placeholder for short ding, let's use a real short base64 or a free url? 
+        // Using a short beep URL for simplicity to avoid huge file, or generated one.
+        // Actually, best to use a web audio API oscillator for zero-dependency "ding".
+
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        function playCorrectSound() {
+            if (audioContext.state === 'suspended') audioContext.resume();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            // "Ding" effect: High pitch decaying fast
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(1200, audioContext.currentTime); // High C
+            oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.1);
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.3);
+        }
+
+        // --- Persistence Manager ---
+        const CloudPersistence = {
+            async saveProgress(filename, content, page) {
+                if (!currentUser || !authToken) return;
+
+                try {
+                    await API.progress.update({
+                        last_file: filename,
+                        last_content: content,
+                        last_page: page
+                    });
+                } catch (error) {
+                    console.error('Cloud save failed:', error);
+                }
+            },
+
+            async load() {
+                if (!currentUser || !authToken) return;
+
+                try {
+                    const { progress } = await API.progress.get();
+
+                    if (progress && progress.last_file) {
+                        // Update local state to match cloud
+                        localStorage.setItem('last_csv_filename', progress.last_file);
+                        localStorage.setItem('last_csv_content', progress.last_content);
+                        localStorage.setItem('last_page', progress.last_page);
+
+                        // Trigger load
+                        autoLoadCSV();
+                    } else {
+                        // No cloud data, first sync
+                        autoLoadCSV();
+                    }
+                } catch (error) {
+                    console.error('Cloud load failed:', error);
+                    autoLoadCSV();
+                }
+            }
+        };
+
+        const DataPersistence = {
+            save(filename, content) {
+                try {
+                    localStorage.setItem('last_csv_filename', filename);
+                    localStorage.setItem('last_csv_content', content);
+                    if (currentUser) CloudPersistence.saveProgress(filename, content, currentPage);
+                } catch (e) { console.error('Storage full?', e); }
+            },
+
+            load() {
+                const filename = localStorage.getItem('last_csv_filename');
+                const content = localStorage.getItem('last_csv_content');
+                if (filename && content) {
+                    return { filename, content };
+                }
+                return null;
+            },
+
+            savePage(page) {
+                localStorage.setItem('last_page', page);
+                if (currentUser) {
+                    const { filename, content } = this.load() || {};
+                    if (filename) CloudPersistence.saveProgress(filename, content, page);
+                }
+            },
+
+            loadPage() {
+                return parseInt(localStorage.getItem('last_page') || 1);
+            }
+        };
+
+        // --- Stats Manager ---
+        const WordStats = {
+            storageKey: 'word_spelling_stats',
+            data: {},
+
+            async init() {
+                // Try load local first
+                const stored = localStorage.getItem(this.storageKey);
+                if (stored) {
+                    this.data = JSON.parse(stored);
+                }
+
+                // If logged in, sync with cloud
+                if (currentUser && authToken) {
+                    try {
+                        const { stats } = await API.stats.getAll();
+
+                        if (stats) {
+                            stats.forEach(row => {
+                                this.data[row.word] = {
+                                    correct: row.correct,
+                                    wrong: row.wrong,
+                                    lastPracticed: row.last_practiced
+                                };
+                            });
+                            this.saveFunc(); // Update local storage
+                        }
+                    } catch (error) {
+                        console.error('Failed to load stats from cloud:', error);
+                    }
+                }
+            },
+
+            saveFunc() {
+                localStorage.setItem(this.storageKey, JSON.stringify(this.data));
+            },
+
+            async save(word, stat) {
+                this.saveFunc();
+
+                if (currentUser && authToken && word) {
+                    try {
+                        await API.stats.update(word, stat.correct, stat.wrong, stat.lastPracticed);
+                    } catch (error) {
+                        console.error('Failed to save stat to cloud:', error);
+                    }
+                }
+            },
+
+            get(word) {
+                return this.data[word] || { correct: 0, wrong: 0, lastPracticed: 0 };
+            },
+
+            update(word, isCorrect) {
+                if (!this.data[word]) {
+                    this.data[word] = { correct: 0, wrong: 0, lastPracticed: 0 };
+                }
+                const stat = this.data[word];
+                if (isCorrect) stat.correct++;
+                else stat.wrong++;
+                stat.lastPracticed = Date.now();
+                this.save(word, stat);
+            }
+        };
+
+        // Initialize Stats (will be re-called on auth change if needed, but for now simple init)
+        WordStats.init();
+
+        // Reset all mastered words
+        function resetAllMastered() {
+            const masteredCount = allWordData.filter(w => {
+                const stats = WordStats.get(w.english);
+                return stats.correct >= 3 && stats.wrong === 0;
+            }).length;
+
+            if (masteredCount === 0) {
+                alert('没有已背熟的单词哦！');
+                return;
+            }
+
+            if (confirm(`确定要重置所有已背熟的单词吗？\n\n将清空 ${masteredCount} 个单词的学习记录！`)) {
+                let resetCount = 0;
+                allWordData.forEach(w => {
+                    const stats = WordStats.get(w.english);
+                    if (stats.correct >= 3 && stats.wrong === 0) {
+                        WordStats.data[w.english] = { correct: 0, wrong: 0, lastPracticed: 0 };
+                        WordStats.save(w.english, WordStats.data[w.english]);
+                        resetCount++;
+                    }
+                });
+
+                // Refresh display
+                filterData();
+                renderPage(1);
+                renderPagination();
+                alert(`✅ 已重置 ${resetCount} 个单词！`);
+            }
+        }
+
+        function switchMode(mode) {
+            currentMode = mode;
+
+            // Update UI
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active'); // Note: this relies on event bubbling/binding
+
+            filterData();
+            currentPage = 1;
+            renderPage(1);
+            renderPagination();
+        }
+
+        function filterData() {
+            // Helper function to check if word is mastered
+            const isMastered = (word) => {
+                const stats = WordStats.get(word.english);
+                return stats.correct >= 3 && stats.wrong === 0;
+            };
+
+            if (currentMode === 'all') {
+                // Show ALL words (including mastered)
+                displayData = [...allWordData];
+            } else if (currentMode === 'new') {
+                displayData = allWordData.filter(w => {
+                    if (isMastered(w)) return false; // Exclude mastered
+                    const stats = WordStats.get(w.english);
+                    return stats.correct === 0 && stats.wrong === 0;
+                });
+            } else if (currentMode === 'mistake') {
+                displayData = allWordData.filter(w => {
+                    if (isMastered(w)) return false; // Exclude mastered
+                    const stats = WordStats.get(w.english);
+                    return stats.wrong > 0 && (stats.wrong > stats.correct); // Only showing words where errors exceed correct answers, or just any error? User said "易错题". Let's simply show any that have errors > 0 for now, sorted by error count.
+                }).sort((a, b) => {
+                    const statsA = WordStats.get(a.english);
+                    const statsB = WordStats.get(b.english);
+                    return statsB.wrong - statsA.wrong; // Descending order of mistakes
+                });
+            } else if (currentMode === 'mastered') {
+                // Show only mastered words
+                displayData = allWordData.filter(w => isMastered(w));
+            }
+
+            // If mistake/new mode is empty, show alert or fallback? 
+            if (displayData.length === 0 && allWordData.length > 0) {
+                // Optional: Auto-switch back or show empty state. 
+                // For now just letting it render empty list 
+            }
+        }
+
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('currentTime').textContent = `当前时间: ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+        }
+        setInterval(updateTime, 60000);
+        updateTime();
+
+        // 文件输入处理
+        document.querySelector('.file-input-wrapper button').addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+
+        document.getElementById('timerBtn').addEventListener('click', () => {
+            if (!startTime) {
+                startTime = Date.now();
+                document.getElementById('timerBtn').textContent = '⏸️ 停止计时';
+                setInterval(() => {
+                    if (startTime) {
+                        let elapsed = Math.floor((Date.now() - startTime) / 1000);
+                        document.getElementById('elapsedTimeDisplay').textContent = `已用时间: ${elapsed} 秒`;
+                    }
+                }, 1000);
+            } else {
+                startTime = null;
+                document.getElementById('timerBtn').textContent = '⏱️ 开始计时';
+            }
+        });
+
+        document.getElementById('screenshotBtn').addEventListener('click', () => {
+            html2canvas(document.body, {
+                scale: window.devicePixelRatio || 1,
+                useCORS: true
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `拼写检测截图_${new Date().toISOString().slice(0, 19)}.png`;
+                link.href = canvas.toDataURL();
+                link.click();
+            });
+        });
+
+        document.getElementById('fileInput').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    parseCSVData(e.target.result, file.name);
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        function renderPage(page) {
+            currentPage = page;
+            DataPersistence.savePage(page); // Save current page
+            const start = (page - 1) * WORDS_PER_PAGE;
+
+            if (displayData.length === 0) {
+                document.getElementById('wordList').innerHTML = `<div style="text-align:center; padding: 20px; color: #666;">当前模式下没有单词哦 🎉</div>`;
+                return;
+            }
+
+            const words = displayData.slice(start, start + WORDS_PER_PAGE);
+            document.getElementById('wordList').innerHTML = words.map((word, index) => {
+                const stats = WordStats.get(word.english);
+                return `
+                <div class="word-item">
+                    <div class="chinese-text">${word.chinese}</div>
+                    <div class="word-stats">
+                        <span class="stat-badge correct">✓ ${stats.correct}</span>
+                        <span class="stat-badge wrong">✗ ${stats.wrong}</span>
+                        ${stats.correct >= 3 && stats.wrong === 0 ? '<span class="stat-badge" style="background:#d4edda; color:#155724;">✅ 已背熟</span>' : ''}
+                    </div>
+                    <div class="input-container">
+                        <input type="text" class="input-box" 
+                               placeholder="请输入英文单词..." 
+                               oninput="checkSpelling(this, '${word.english}', this.nextElementSibling)"
+                               autocomplete="off"
+                               autocorrect="off"
+                               autocapitalize="off"
+                               spellcheck="false">
+                        <span class="check-icon">❌</span>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn-icon btn-sound" onclick="playSound('${word.english}')" title="播放发音">🔊</button>
+                        <button class="btn-icon btn-spell" onclick="showSpelling('${word.english}')" title="拼写示范">✏️</button>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        function renderPagination() {
+            const totalPages = Math.ceil(displayData.length / WORDS_PER_PAGE);
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            if (totalPages <= 1) return;
+
+            // 上一页按钮
+            if (currentPage > 1) {
+                const prevButton = document.createElement('button');
+                prevButton.innerHTML = '‹ 上一页';
+                prevButton.addEventListener('click', () => {
+                    renderPage(currentPage - 1);
+                    renderPagination();
+                });
+                pagination.appendChild(prevButton);
+            }
+
+            // 页码按钮（显示当前页前后各2页）
+            const start = Math.max(1, currentPage - 2);
+            const end = Math.min(totalPages, currentPage + 2);
+
+            if (start > 1) {
+                const firstButton = document.createElement('button');
+                firstButton.textContent = '1';
+                firstButton.addEventListener('click', () => {
+                    renderPage(1);
+                    renderPagination();
+                });
+                pagination.appendChild(firstButton);
+
+                if (start > 2) {
+                    const ellipsis = document.createElement('span');
+                    ellipsis.textContent = '...';
+                    ellipsis.style.padding = '0 10px';
+                    pagination.appendChild(ellipsis);
+                }
+            }
+
+            for (let i = start; i <= end; i++) {
+                const button = document.createElement('button');
+                button.textContent = i;
+                button.classList.toggle('active', i === currentPage);
+                button.addEventListener('click', () => {
+                    renderPage(i);
+                    renderPagination();
+                });
+                pagination.appendChild(button);
+            }
+
+            if (end < totalPages) {
+                if (end < totalPages - 1) {
+                    const ellipsis = document.createElement('span');
+                    ellipsis.textContent = '...';
+                    ellipsis.style.padding = '0 10px';
+                    pagination.appendChild(ellipsis);
+                }
+
+                const lastButton = document.createElement('button');
+                lastButton.textContent = totalPages;
+                lastButton.addEventListener('click', () => {
+                    renderPage(totalPages);
+                    renderPagination();
+                });
+                pagination.appendChild(lastButton);
+            }
+
+            // 下一页按钮
+            if (currentPage < totalPages) {
+                const nextButton = document.createElement('button');
+                nextButton.innerHTML = '下一页 ›';
+                nextButton.addEventListener('click', () => {
+                    renderPage(currentPage + 1);
+                    renderPagination();
+                });
+                pagination.appendChild(nextButton);
+            }
+        }
+
+        // Mobile Keyboard Fix: Scroll to center on focus
+        document.addEventListener('focus', (e) => {
+            if (e.target.tagName === 'INPUT') {
+                setTimeout(() => {
+                    e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300);
+            }
+        }, true);
+
+        function checkSpelling(input, correctWord, icon) {
+            const userInput = input.value.trim().toLowerCase();
+            const correct = correctWord.toLowerCase();
+
+            // Prevent duplicate stats update for same input session?
+            // Simple logic: update on first success or failure per focus session?
+            // For simplicity: update on every change that matches result? No, that's too much.
+            // Better: Update only when user hits Enter? Or just rely on visual feedback?
+            // User requirement: "自动记录". Usually means when they get it right or wrong.
+            // To avoid spamming stats while typing:
+            // 1. Only mark correct when exact match.
+            // 2. Mark wrong? Hard to define "finished typing wrong".
+            // Let's stick to: If they enter correct word -> Correct ++.
+            // If they give up/check answer (not implemented yet) -> Wrong ++.
+            // Current code is oninput.
+            // Let's add a "checked" flag to the input element to avoid double counting?
+
+            if (userInput === correct) {
+                if (!input.dataset.solved) {
+                    WordStats.update(correctWord, true);
+                    input.dataset.solved = "true";
+                    playCorrectSound(); // Play Ding!
+                    // Refresh stats view? No, might re-render and lose focus. 
+                    // Let's just update backend. Next render will show it.
+                }
+
+                icon.innerHTML = "✅";
+                icon.style.color = "green";
+                icon.style.display = "inline";
+                input.style.borderColor = "#28a745";
+                input.style.backgroundColor = "#d4edda";
+            } else if (userInput === '') {
+                icon.style.display = "none";
+                input.style.borderColor = "#ddd";
+                input.style.backgroundColor = "#fafafa";
+            } else {
+                // Check if it's a "complete" attempt? 
+                // Difficult to know oninput. 
+                // Maybe we only count WRONG when they click "Next" or "Reveal"?
+                // Or we can add an explicit "Check" button?
+                // The current UI is real-time. 
+                // Let's NOT count "Wrong" on simple typos while typing.
+                // We will count "Wrong" if they use the "Spell" (Show Answer) button.
+
+                icon.innerHTML = "❌";
+                icon.style.color = "red";
+                icon.style.display = "inline";
+                input.style.borderColor = "#dc3545";
+                input.style.backgroundColor = "#f8d7da";
+            }
+        }
+
+        function playSound(word) {
+            try {
+                const audio = new Audio(`${youdaoAPI}${encodeURIComponent(word)}&type=1`);
+                audio.play().catch(e => {
+                    console.log('音频播放失败:', e);
+                    // 可以添加备用发音源或提示
+                });
+            } catch (e) {
+                console.log('创建音频失败:', e);
+            }
+        }
+
+        function showSpelling(word) {
+            // If user asks for answer, count as WRONG
+            WordStats.update(word, false);
+
+            if (spellTimeout) {
+                clearTimeout(spellTimeout);
+            }
+
+            const spellContainer = document.getElementById('spellContainer');
+            const letters = word.split('');
+
+            spellContainer.innerHTML = `
+                <button class="close-spell" onclick="closeSpelling()">×</button>
+                ${letters.map((letter, index) => `
+                    <span class="spell-letter" style="animation-delay: ${index * 0.3}s">${letter}</span>
+                `).join('')}
+            `;
+
+            spellContainer.style.display = 'flex';
+
+            // 自动关闭并播放发音
+            spellTimeout = setTimeout(() => {
+                closeSpelling();
+                playSound(word);
+            }, (letters.length * 300) + 2000);
+        }
+
+        function closeSpelling() {
+            document.getElementById('spellContainer').style.display = 'none';
+            if (spellTimeout) {
+                clearTimeout(spellTimeout);
+                spellTimeout = null;
+            }
+        }
+
+        // 添加触摸事件支持
+        document.addEventListener('touchstart', function () { }, true);
+
+        // 防止双击缩放
+        document.addEventListener('touchend', function (event) {
+            const now = Date.now();
+            if (this.lastTouchEnd && now - this.lastTouchEnd < 350) {
+                event.preventDefault();
+            }
+            this.lastTouchEnd = now;
+        }, false);
+
+        // 页面加载时自动尝试加载同目录下的CSV文件
+        async function autoLoadCSV() {
+            console.log("正在尝试自动加载数据...");
+
+            const lastFilename = localStorage.getItem('last_csv_filename');
+            const savedPage = DataPersistence.loadPage();
+            let loaded = false;
+
+            // Priority 1: Try to refresh from server (Fixes stale cache issue)
+            if (lastFilename) {
+                try {
+                    // Try to fetch using the filename (decoding it to ensure path is correct if encoded)
+                    // If it's a local file name that doesn't exist on server, this simply fails (404)
+                    const response = await fetch(lastFilename);
+                    if (response.ok) {
+                        const text = await response.text();
+                        if (text && text.trim().length > 0) {
+                            console.log('从服务器刷新文件成功:', lastFilename);
+                            parseCSVData(text, lastFilename, true); // Update cache with new content
+
+                            const status = document.querySelector('.file-status');
+                            status.innerHTML = `已加载: ${lastFilename} <span style="font-size:10px; color:#999;">(已更新)</span>`;
+                            status.style.color = '#28a745';
+
+                            if (savedPage > 1) showResumeModal(savedPage);
+                            else { renderPage(1); renderPagination(); }
+                            loaded = true;
+                        }
+                    }
+                } catch (e) {
+                    // Fetch failed (network error or not a http file), fall back to cache
+                    console.log('服务器文件获取失败, 转用缓存:', e);
+                }
+            }
+
+            // Priority 2: Use cached content (For offline mode or local uploaded files)
+            if (!loaded) {
+                const lastSession = DataPersistence.load();
+                if (lastSession) {
+                    console.log('从缓存/上次会话恢复数据:', lastSession.filename);
+                    parseCSVData(lastSession.content, lastSession.filename, false);
+
+                    const status = document.querySelector('.file-status');
+                    status.innerHTML = `已加载: ${lastSession.filename} <span style="font-size:10px; color:#999;">(自动恢复)</span>`;
+                    status.style.color = '#28a745';
+
+                    if (savedPage > 1) showResumeModal(savedPage);
+                    else { renderPage(1); renderPagination(); }
+                    loaded = true;
+                }
+            }
+
+            if (loaded) return;
+
+            // Auto-load B3U7 ART P113.csv by default
+            const defaultFiles = [
+                'B3U7_ART_P113.csv',  // Use underscore instead of spaces
+                'B3U7 ART P113.csv',  // Fallback to original name
+                'anki_words.csv'
+            ];
+
+            for (const filename of defaultFiles) {
+                try {
+                    const response = await fetch(filename);
+                    if (response.ok) {
+                        const text = await response.text();
+                        if (text.trim()) {
+                            console.log(`Successfully loaded: ${filename}`);
+                            parseCSVData(text, filename);
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.log(`Failed to load ${filename}:`, error);
+                }
+            }
+
+            // Show example data if no CSV file found
+            showExampleData();
+        }
+
+        function showResumeModal(page) {
+            document.getElementById('savedParams').textContent = page;
+            document.getElementById('resumeModal').style.display = 'flex';
+        }
+
+        function handleResume(resume) {
+            document.getElementById('resumeModal').style.display = 'none';
+            if (resume) {
+                const savedPage = DataPersistence.loadPage();
+                renderPage(savedPage);
+            } else {
+                renderPage(1);
+            }
+            renderPagination();
+        }
+
+        function parseCSVData(text, filename, save = true) {
+            allWordData = text.split('\n').map(line => {
+                const parts = line.split(',');
+                return parts.length >= 2 ? {
+                    english: parts[0].trim(),
+                    chinese: parts.slice(1).join(',').trim()
+                } : null;
+            }).filter(word => word && word.english && word.chinese);
+
+            if (allWordData.length > 0) {
+                if (save) {
+                    DataPersistence.save(filename, text);
+                    DataPersistence.savePage(1); // Reset page on new file load
+                }
+
+                document.querySelector('.file-status').textContent = `已加载: ${filename} (${allWordData.length}个单词)`;
+                document.querySelector('.file-status').style.color = '#28a745';
+
+                filterData();
+
+                if (save) {
+                    renderPage(1);
+                    renderPagination();
+                }
+            } else {
+                showExampleData();
+            }
+        }
+
+        function hideFileInput() {
+            const fileWrapper = document.querySelector('.file-input-wrapper');
+            fileWrapper.style.display = 'none';
+        }
+
+        function showExampleData() {
+            allWordData = [
+                { english: 'hello', chinese: '你好' },
+                { english: 'world', chinese: '世界' },
+                { english: 'computer', chinese: '计算机' },
+                { english: 'mobile', chinese: '移动的' },
+                { english: 'tablet', chinese: '平板电脑' }
+            ];
+            document.querySelector('.file-status').innerHTML = '📝 当前使用示例数据 (5个单词)<br><span style="font-size:11px;">💡 点击上方"📁 选择文件"导入您的CSV词库</span>';
+            document.querySelector('.file-status').style.color = '#ffc107';
+
+            filterData();
+            renderPage(1);
+            renderPagination();
+        }
+
+
+
+        // --- Theme Feature ---
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+
+        // --- Library Feature ---
+        let libraryFiles = [];
+
+        function toggleLibrary() {
+            const drawer = document.getElementById('libraryDrawer');
+            drawer.classList.toggle('open');
+        }
+
+        function handleFolderSelect(input) {
+            const files = Array.from(input.files).filter(f => f.name.endsWith('.csv') || f.name.endsWith('.txt'));
+            if (files.length === 0) {
+                alert('未找到CSV或TXT文件');
+                return;
+            }
+
+            // Sort files by name naturally
+            files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+            libraryFiles = files;
+
+            renderLibraryList();
+        }
+
+        function renderLibraryList() {
+            const list = document.getElementById('libraryList');
+            list.innerHTML = libraryFiles.map((file, index) => `
+                <li class="library-item" onclick="loadLibraryFile(${index})">
+                    ${file.name}
+                </li>
+            `).join('');
+        }
+
+        function loadLibraryFile(index) {
+            const file = libraryFiles[index];
+            if (!file) return;
+
+            // Highlight active item
+            document.querySelectorAll('.library-item').forEach((el, i) => {
+                el.classList.toggle('active', i === index);
+            });
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                // Reset page to 1 when explicitly selecting from library
+                // But parseCSVData handles persistence... 
+                // We want to treat this as a fresh load.
+                parseCSVData(e.target.result, file.name);
+
+                // Close drawer on mobile only
+                if (window.innerWidth < 768) {
+                    toggleLibrary();
+                }
+            };
+            reader.readAsText(file);
+        }
+        function hardReset() {
+            if (confirm('确定要清除所有缓存并强制刷新吗？\n这将清除本地的学习进度。')) {
+                localStorage.clear();
+                window.location.reload(true);
+            }
+        }
+    </script>
+
+</body>
+
+</html>
