@@ -3082,8 +3082,9 @@
             setMeta(m) { try { localStorage.setItem(this.META, JSON.stringify(m)); } catch (e) {} },
             collect() { const data = {}; this.KEYS.forEach(k => { const v = localStorage.getItem(k); if (v !== null) data[k] = v; }); return data; },
             schedule() {
-                if (this.applying || !currentUser) return;
+                if (this.applying) return;
                 const m = this.meta(); m.updatedAt = Date.now(); this.setMeta(m);
+                if (!currentUser) return;
                 clearTimeout(this.timer);
                 this.timer = setTimeout(() => this.push(), 2500);
             },
