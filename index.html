@@ -1720,6 +1720,7 @@
 
                 // Load cloud data
                 CloudPersistence.load();
+                LibSync.pull();
             } else {
                 userSection.style.display = 'none';
                 loginBtn.style.display = 'block';
@@ -3070,6 +3071,101 @@
             }
             line.style.display = 'block';
         }
+
+        // --- Cross-device library sync via Supabase (needs public.user_library table; degrades gracefully without it) ---
+        const LibSync = {
+            KEYS: ['word_spelling_diy_words', 'word_spelling_my_words', 'word_spelling_diy_sentences', 'word_spelling_school', 'word_spelling_srs', 'word_spelling_daily'],
+            META: 'word_spelling_lib_meta',
+            applying: false,
+            timer: null,
+            meta() { try { return JSON.parse(localStorage.getItem(this.META)) || {}; } catch (e) { return {}; } },
+            setMeta(m) { try { localStorage.setItem(this.META, JSON.stringify(m)); } catch (e) {} },
+            collect() { const data = {}; this.KEYS.forEach(k => { const v = localStorage.getItem(k); if (v !== null) data[k] = v; }); return data; },
+            schedule() {
+                if (this.applying || !currentUser) return;
+                const m = this.meta(); m.updatedAt = Date.now(); this.setMeta(m);
+                clearTimeout(this.timer);
+                this.timer = setTimeout(() => this.push(), 2500);
+            },
+            async push() {
+                if (!currentUser) return;
+                try {
+                    const payload = { v: 1, updatedAt: this.meta().updatedAt || Date.now(), data: this.collect() };
+                    const { error } = await supabaseClient.from('user_library').upsert({ user_id: currentUser.id, data: payload, updated_at: new Date().toISOString() });
+                    if (error) { console.log('LibSync push skipped:', error.message); return; }
+                    const m = this.meta(); m.syncedAt = payload.updatedAt; this.setMeta(m);
+                } catch (e) { console.log('LibSync push failed', e); }
+            },
+            apply(data) {
+                this.applying = true;
+                try { this.KEYS.forEach(k => { if (data[k] !== undefined) localStorage.setItem(k, data[k]); }); } catch (e) {}
+                this.applying = false;
+                try { renderSchoolBar(); } catch (e) {}
+            },
+            mergeData(local, remote) {
+                const out = {};
+                const parse = (s, dft) => { try { return JSON.parse(s); } catch (e) { return dft; } };
+                const unionList = (a, b, keyFn) => { const seen = {}, res = []; (a || []).concat(b || []).forEach(it => { const k = keyFn(it); if (!seen[k]) { seen[k] = 1; res.push(it); } }); return res; };
+                ['word_spelling_diy_words', 'word_spelling_my_words'].forEach(k => {
+                    if (local[k] === undefined && remote[k] === undefined) return;
+                    out[k] = JSON.stringify(unionList(parse(local[k], []), parse(remote[k], []), it => (it.en || '').toLowerCase()));
+                });
+                if (local['word_spelling_diy_sentences'] !== undefined || remote['word_spelling_diy_sentences'] !== undefined) {
+                    out['word_spelling_diy_sentences'] = JSON.stringify(unionList(parse(local['word_spelling_diy_sentences'], []), parse(remote['word_spelling_diy_sentences'], []), it => it.en));
+                }
+                const school = remote['word_spelling_school'] !== undefined ? remote['word_spelling_school'] : local['word_spelling_school'];
+                if (school !== undefined) out['word_spelling_school'] = school;
+                if (local['word_spelling_srs'] !== undefined || remote['word_spelling_srs'] !== undefined) {
+                    const L = parse(local['word_spelling_srs'], {}), R = parse(remote['word_spelling_srs'], {}), M = {};
+                    Object.keys(L).concat(Object.keys(R)).forEach(w => {
+                        const a = L[w], b = R[w];
+                        if (!a) M[w] = b; else if (!b) M[w] = a;
+                        else M[w] = (b.level > a.level || (b.level === a.level && (b.due || '') > (a.due || ''))) ? b : a;
+                    });
+                    out['word_spelling_srs'] = JSON.stringify(M);
+                }
+                if (local['word_spelling_daily'] !== undefined || remote['word_spelling_daily'] !== undefined) {
+                    const L = parse(local['word_spelling_daily'], {}), R = parse(remote['word_spelling_daily'], {}), M = {};
+                    Object.keys(L).concat(Object.keys(R)).forEach(d => {
+                        const a = L[d], b = R[d];
+                        if (!a) M[d] = b; else if (!b) M[d] = a; else M[d] = (b.a || 0) > (a.a || 0) ? b : a;
+                    });
+                    out['word_spelling_daily'] = JSON.stringify(M);
+                }
+                return out;
+            },
+            async pull() {
+                if (!currentUser) return;
+                try {
+                    const { data, error } = await supabaseClient.from('user_library').select('data').single();
+                    if (error) {
+                        if (error.code !== 'PGRST116') console.log('LibSync pull skipped:', error.message);
+                        if (error.code === 'PGRST116') this.push();
+                        return;
+                    }
+                    if (!data || !data.data) { this.push(); return; }
+                    const remote = data.data;
+                    const m = this.meta();
+                    const localAt = m.updatedAt || 0;
+                    if ((remote.updatedAt || 0) > localAt) {
+                        const merged = this.mergeData(this.collect(), remote.data || {});
+                        this.apply(merged);
+                        const nm = this.meta(); nm.updatedAt = remote.updatedAt; nm.syncedAt = remote.updatedAt; this.setMeta(nm);
+                        this.push();
+                    } else if (localAt > (m.syncedAt || 0)) {
+                        this.push();
+                    }
+                } catch (e) { console.log('LibSync pull failed', e); }
+            }
+        };
+        (function() {
+            const origSet = localStorage.setItem.bind(localStorage);
+            localStorage.setItem = function(k, v) {
+                origSet(k, v);
+                if (LibSync.KEYS.indexOf(k) >= 0 && !LibSync.applying) LibSync.schedule();
+            };
+        })();
+
         var reverseActive = false;
         function updateReverseBtn() { var b = document.getElementById('reverseBtn'); if (b) b.innerText = reverseActive ? '↩️ 退出反向选义' : '🔁 反向选义（看英文选中文）'; }
         function resetReverse() { reverseActive = false; updateReverseBtn(); }
